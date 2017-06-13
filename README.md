@@ -26,6 +26,10 @@ Example usage:
 node index.js --settings settings.json
 ```
 
+## Prerequisites
+
+- Node 8.0+ (for async / await and promisify support)
+
 **WARNING**
 
 **Use at your own risk. Ensure your files are source controlled or backed up first!**

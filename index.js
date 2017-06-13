@@ -1,52 +1,59 @@
-const argv = require('yargs').argv;
-const fs = require('fs');
-const glob = require("glob");
+const { promisify } = require('util')
+const fs = require('fs')
+const { argv } = require('yargs')
+const glob = require("glob")
 
-if (!argv.settings) {
-    console.error('Please supply a path to a json file containing the settings');
-    return;
+const readFileAsync = promisify(fs.readFile)
+const writeFileAsync = promisify(fs.writeFile)
+const globAsync = promisify(glob)
+
+const loadFile = async (filename) => {
+    return await readFileAsync(filename, { encoding: 'utf8' })
 }
 
-fs.readFile(argv.settings, (error, contents) => {
-    if (error) {
-        throw error;
+const replace = async setting => {
+    setting.filePatterns.forEach(async filePattern => {
+        let files = await globAsync(filePattern, {})
+
+        files.forEach(async file => {
+            let contents = await loadFile(file)
+
+            let newContents = contents
+
+            setting.replacements.forEach(replacement => {
+                newContents = newContents.replace(new RegExp(replacement.find, 'g'), replacement.replaceWith)
+            })
+
+            if (newContents !== contents) {
+                console.log(`Applying replacements to ${file}`)
+                await writeFileAsync(file, newContents, 'utf8')
+            } else {
+                console.log(`No matches detected in ${file}`)
+            }
+        })
+    })
+}
+
+const replaceAsync = promisify(replace)
+
+const app = async () => {
+    if (!argv.settings) {
+        console.error('Please supply a path to a json file containing the settings')
+        return
     }
 
-    let settings = JSON.parse(contents);
+    try {
+        let settings = JSON.parse(await loadFile(argv.settings))
 
-    settings.forEach(setting => {
-        replace(setting);
-    });
-});
+        settings.forEach(async setting => {
+            await replaceAsync(setting)
+        })
 
-function replace(setting) {
-    setting.filePatterns.forEach(filePattern => {
-        glob(filePattern, {}, (error, files) => {
-            files.forEach(file => {
-                fs.readFile(file, 'utf8', (error, contents) => {
-                    if (error) {
-                        console.error(error);
-                        return;
-                    }
-
-                    let newContents = contents;
-
-                    setting.replacements.forEach(replacement => {
-                        newContents = newContents.replace(new RegExp(replacement.find, 'g'), replacement.replaceWith);
-                    });
-
-                    if (newContents !== contents) {
-                        console.log(`Applying replacements to ${file}`);
-                        fs.writeFile(file, newContents, 'utf8', error => {
-                            if (error) {
-                                console.error(error);
-                            }
-                        });
-                    } else {
-                        console.log(`No matches detected in ${file}`);
-                    }
-                });
-            });
-        });
-    });
+        console.log('Completed')
+    }
+    catch (e) {
+        console.error(e)
+    }
 }
+
+app()
